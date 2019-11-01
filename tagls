@@ -1,0 +1,57 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]
+then
+cat << HELP
+
+$0  --  list all tags for a container image on a remote registry.
+
+EXAMPLE:
+  - list all tags for ubuntu on dockerhub:
+      $0 ubuntu
+
+  - list all tags for ubuntu containing "18.04":
+      $0 ubuntu 18.04
+
+  - list all tags for an image on a custom registry:
+      $0 quay.io/coreos/clair
+
+HELP
+fi
+
+REGISTRY="$(echo $1 | cut -d '/' -f 1 -s)"
+CONTAINER_PATH="$(echo $1 | cut -d '/' -f 2 -s)"
+CONTAINER_NAME="$(echo $1 | cut -d '/' -f 3 -s)"
+CONTAINER="$CONTAINER_PATH/$CONTAINER_NAME"
+
+# If there are no forward slashes, we have a single container name
+if [ -z ${REGISTRY} ]; then
+  REGISTRY="registry.hub.docker.com"
+  CONTAINER="$1"
+
+# If first part before a slash does not contain a dot, its not a custom registry
+elif [[ ! "$REGISTRY" == *"."* ]]; then
+  REGISTRY="registry.hub.docker.com"
+  CONTAINER_PATH="$(echo $1 | cut -d '/' -f 1 -s)"
+  CONTAINER_NAME="$(echo $1 | cut -d '/' -f 2 -s)"
+  CONTAINER="$CONTAINER_PATH/$CONTAINER_NAME"
+
+# If there is no third part, we have a container and path
+elif [ -z $CONTAINER_NAME ]; then
+  REGISTRY="registry.hub.docker.com"
+  CONTAINER="$(echo $1 | cut -d '/' -f 1 -s)"
+
+fi
+
+if [ $REGISTRY == "registry.hub.docker.com" ]; then
+  tags=`wget -q https://"$REGISTRY"/v1/repositories/${CONTAINER}/tags -O - | sed -e 's/[][]//g' -e 's/"//g' -e 's/ //g' | tr '}' '\n'  | awk -F: '{print $3}'`
+else
+  tags=`wget -q https://"$REGISTRY"/v1/repositories/${CONTAINER}/tags -O - | tr ',' '\n' | sed 's/[}{]//g' | cut -d: -f1 | tr -d '"'`
+fi
+
+if [ -n "$2" ]
+then
+    tags=` echo "${tags}" | grep "$2" `
+fi
+
+echo "${tags}"
